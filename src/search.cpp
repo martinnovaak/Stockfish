@@ -82,7 +82,6 @@ int correction_value(const Worker& w, const Position& pos, Stack* ss) {
     const auto  m     = (ss - 1)->currentMove;
     const auto  m2    = (ss - 2)->currentMove;
     const auto  pcv   = w.pawnCorrectionHistory[us][pawn_structure_index<Correction>(pos)];
-    const auto  macv  = w.majorPieceCorrectionHistory[us][major_piece_index(pos)];
     const auto  micv  = w.minorPieceCorrectionHistory[us][minor_piece_index(pos)];
     const auto  wnpcv = w.nonPawnCorrectionHistory[WHITE][us][non_pawn_index<WHITE>(pos)];
     const auto  bnpcv = w.nonPawnCorrectionHistory[BLACK][us][non_pawn_index<BLACK>(pos)];
@@ -91,10 +90,10 @@ int correction_value(const Worker& w, const Position& pos, Stack* ss) {
                  : 0;
 
     const auto  cntcv2 =
-      m2.is_ok() ? (*(ss - 3)->continuationCorrectionHistory)[pos.piece_on(m.to_sq())][m.to_sq()]
+      (m.is_ok() && m2.is_ok()) ? (*(ss - 3)->continuationCorrectionHistory)[pos.piece_on(m.to_sq())][m.to_sq()]
                  : 0;
 
-    return (6300 * pcv + 3500 * macv + 6400 * micv + 6700 * (wnpcv + bnpcv) + 5400 * (cntcv + cntcv2));
+    return (6384 * pcv + 6492 * micv + 6725 * (wnpcv + bnpcv) + 5880 * cntcv + 3583 * cntcv2);
 }
 
 // Add correctionHistory value to raw staticEval and guarantee evaluation
@@ -1450,7 +1449,6 @@ moves_loop:  // When in check, search starts here
                                 -CORRECTION_HISTORY_LIMIT / 4, CORRECTION_HISTORY_LIMIT / 4);
         thisThread->pawnCorrectionHistory[us][pawn_structure_index<Correction>(pos)]
           << bonus * 107 / 128;
-        thisThread->majorPieceCorrectionHistory[us][major_piece_index(pos)] << bonus * 162 / 128;
         thisThread->minorPieceCorrectionHistory[us][minor_piece_index(pos)] << bonus * 148 / 128;
         thisThread->nonPawnCorrectionHistory[WHITE][us][non_pawn_index<WHITE>(pos)]
           << bonus * nonPawnWeight / 128;
@@ -1460,7 +1458,7 @@ moves_loop:  // When in check, search starts here
         if (m.is_ok())
             (*(ss - 2)->continuationCorrectionHistory)[pos.piece_on(m.to_sq())][m.to_sq()] << bonus;
 
-        if (m2.is_ok())
+        if (m.is_ok() && m2.is_ok())
             (*(ss - 3)->continuationCorrectionHistory)[pos.piece_on(m.to_sq())][m.to_sq()] << bonus;
     }
 
