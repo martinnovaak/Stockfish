@@ -1432,10 +1432,12 @@ moves_loop:  // When in check, search starts here
                                             : BOUND_UPPER,
                        depth, bestMove, unadjustedStaticEval, tt.generation());
 
+
+    const auto evalAvg = int((ss->staticEval + unadjustedStaticEval) / 2);
     // Adjust correction history
     if (!ss->inCheck && !(bestMove && pos.capture(bestMove))
-        && ((bestValue < ss->staticEval && bestValue < beta)  // negative correction & no fail high
-            || (bestValue > ss->staticEval && bestMove)))     // positive correction & no fail low
+        && ((bestValue < evalAvg && bestValue < beta)  // negative correction & no fail high
+            || (bestValue > evalAvg && bestMove)))     // positive correction & no fail low
     {
         const auto       m             = (ss - 1)->currentMove;
         static const int nonPawnWeight = 154;
