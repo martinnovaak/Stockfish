@@ -1436,6 +1436,7 @@ moves_loop:  // When in check, search starts here
     {
         const auto    m             = (ss - 1)->currentMove;
         const auto    m2            = (ss - 2)->currentMove;
+        const auto    m3            = (ss - 3)->currentMove;
         constexpr int nonPawnWeight = 165;
 
         auto bonus = std::clamp(int(bestValue - ss->staticEval) * depth / 8,
