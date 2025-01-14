@@ -81,6 +81,7 @@ int correction_value(const Worker& w, const Position& pos, const Stack* ss) {
     const Color us    = pos.side_to_move();
     const auto  m     = (ss - 1)->currentMove;
     const auto  m2    = (ss - 2)->currentMove;
+    const auto  m3    = (ss - 3)->currentMove;
     const auto  pcv   = w.pawnCorrectionHistory[us][pawn_structure_index<Correction>(pos)];
     const auto  macv  = w.majorPieceCorrectionHistory[us][major_piece_index(pos)];
     const auto  micv  = w.minorPieceCorrectionHistory[us][minor_piece_index(pos)];
@@ -92,8 +93,11 @@ int correction_value(const Worker& w, const Position& pos, const Stack* ss) {
     const auto  cntcv2 =
       (m.is_ok() && m2.is_ok()) ? (*(ss - 3)->continuationCorrectionHistory)[pos.piece_on(m.to_sq())][m.to_sq()]
                                 : 0;
+    const auto  cntcv3 =
+      (m.is_ok() && m2.is_ok() && m3.is_ok()) ? (*(ss - 4)->continuationCorrectionHistory)[pos.piece_on(m.to_sq())][m.to_sq()]
+                                              : 0;
 
-    return (6922 * pcv + 3837 * macv + 6238 * micv + 7490 * (wnpcv + bnpcv) + 5800 * cntcv + 3800 * cntcv2);
+    return (6922 * pcv + 3837 * macv + 6238 * micv + 7490 * (wnpcv + bnpcv) + 5800 * cntcv + 3800 * cntcv2 + 2800 * cntcv3);
 }
 
 // Add correctionHistory value to raw staticEval and guarantee evaluation
@@ -1432,6 +1436,7 @@ moves_loop:  // When in check, search starts here
     {
         const auto    m             = (ss - 1)->currentMove;
         const auto    m2            = (ss - 2)->currentMove;
+        const auto    m3            = (ss - 3)->currentMove;
         constexpr int nonPawnWeight = 165;
 
         auto bonus = std::clamp(int(bestValue - ss->staticEval) * depth / 8,
@@ -1450,6 +1455,9 @@ moves_loop:  // When in check, search starts here
 
         if (m.is_ok() && m2.is_ok())
             (*(ss - 3)->continuationCorrectionHistory)[pos.piece_on(m.to_sq())][m.to_sq()] << bonus;
+
+        if (m.is_ok() && m2.is_ok() && m3.is_ok())
+            (*(ss - 4)->continuationCorrectionHistory)[pos.piece_on(m.to_sq())][m.to_sq()] << bonus;
     }
 
     assert(bestValue > -VALUE_INFINITE && bestValue < VALUE_INFINITE);
