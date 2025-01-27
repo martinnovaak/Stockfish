@@ -361,6 +361,8 @@ void Position::set_state() const {
 
                 if (type_of(pc) <= BISHOP)
                     st->minorPieceKey ^= Zobrist::psq[pc][s];
+                else if (type_of(pc) == QUEEN)
+                    st->pawnKey ^= Zobrist::psq[pc][s];
             }
 
             else
@@ -769,6 +771,8 @@ void Position::do_move(Move                      m,
 
             if (type_of(captured) <= BISHOP)
                 st->minorPieceKey ^= Zobrist::psq[captured][capsq];
+            else if (type_of(pc) == QUEEN)
+                st->pawnKey ^= Zobrist::psq[captured][capsq];
         }
 
         dp.dirty_num = 2;  // 1 piece moved, 1 piece captured
@@ -851,6 +855,8 @@ void Position::do_move(Move                      m,
 
             if (promotionType <= BISHOP)
                 st->minorPieceKey ^= Zobrist::psq[promotion][to];
+            else if (type_of(pc) == QUEEN)
+                st->pawnKey ^= Zobrist::psq[promotion][to];
 
             // Update material
             st->nonPawnMaterial[us] += PieceValue[promotion];
@@ -874,6 +880,8 @@ void Position::do_move(Move                      m,
 
         else if (type_of(pc) <= BISHOP)
             st->minorPieceKey ^= Zobrist::psq[pc][from] ^ Zobrist::psq[pc][to];
+        else if (type_of(pc) == QUEEN)
+            st->pawnKey ^= Zobrist::psq[pc][from] ^ Zobrist::psq[pc][to];
     }
 
     // Update the key with the final value
