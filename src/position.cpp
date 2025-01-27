@@ -359,7 +359,7 @@ void Position::set_state() const {
             {
                 st->nonPawnMaterial[color_of(pc)] += PieceValue[pc];
 
-                if (type_of(pc) <= BISHOP)
+                if (type_of(pc) <= ROOK)
                     st->minorPieceKey ^= Zobrist::psq[pc][s];
             }
 
@@ -767,7 +767,7 @@ void Position::do_move(Move                      m,
             st->nonPawnMaterial[them] -= PieceValue[captured];
             st->nonPawnKey[them] ^= Zobrist::psq[captured][capsq];
 
-            if (type_of(captured) <= BISHOP)
+            if (type_of(captured) <= ROOK)
                 st->minorPieceKey ^= Zobrist::psq[captured][capsq];
         }
 
@@ -849,7 +849,7 @@ void Position::do_move(Move                      m,
             st->materialKey ^=
               Zobrist::psq[promotion][pieceCount[promotion] - 1] ^ Zobrist::psq[pc][pieceCount[pc]];
 
-            if (promotionType <= BISHOP)
+            if (promotionType <= ROOK)
                 st->minorPieceKey ^= Zobrist::psq[promotion][to];
 
             // Update material
@@ -872,7 +872,7 @@ void Position::do_move(Move                      m,
             st->minorPieceKey ^= Zobrist::psq[pc][from] ^ Zobrist::psq[pc][to];
         }
 
-        else if (type_of(pc) <= BISHOP)
+        else if (type_of(pc) <= ROOK)
             st->minorPieceKey ^= Zobrist::psq[pc][from] ^ Zobrist::psq[pc][to];
     }
 
