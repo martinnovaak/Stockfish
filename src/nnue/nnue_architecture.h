@@ -93,8 +93,13 @@ struct NetworkArchitecture {
             && fc_2.write_parameters(stream);
     }
 
-    i32 propagate(const TransformedFeatureType* transformedFeatures,
-                  const NNZInfo<L1>&            nnzInfo) const {
+    struct Output {
+        i32 value;
+        u32 activeMask;
+    };
+
+    Output propagate(const TransformedFeatureType* transformedFeatures,
+                     const NNZInfo<L1>&            nnzInfo) const {
         struct alignas(CacheLineSize) Buffer {
             alignas(CacheLineSize) typename decltype(fc_0)::OutputBuffer fc_0_out;
             alignas(CacheLineSize) typename decltype(ac_sqr_0)::OutputType
@@ -123,6 +128,11 @@ struct NetworkArchitecture {
         ac_1.propagate(buffer.fc_1_out, buffer.concat_buffer + FC_0_OUTPUTS * 2 + FC_1_OUTPUTS);
 #endif
 
+        // Use the logical neuron order before SIMD packing.
+        u32 activeMask = 0;
+        for (int i = 0; i < FC_1_OUTPUTS; ++i)
+            activeMask |= u32(buffer.fc_1_out[i] >= (1 << WeightScaleBits)) << i;
+
         fc_2.propagate(buffer.concat_buffer, buffer.fc_2_out);
 
         static_assert(FC_0_OUTPUTS >= 2);
@@ -138,7 +148,7 @@ struct NetworkArchitecture {
           static_cast<i64>(HiddenOneVal) * static_cast<i64>(1U << WeightScaleBits) * 2;
 
         i32 outputValue = static_cast<i32>((static_cast<i64>(fwdOut) * multiplier) / denominator);
-        return outputValue;
+        return {outputValue, activeMask};
     }
 
     usize get_content_hash() const {

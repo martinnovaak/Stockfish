@@ -27,6 +27,7 @@
 #include <string_view>
 #include <filesystem>
 
+#include "../evaluate.h"
 #include "../misc.h"
 #include "../types.h"
 #include "nnue_architecture.h"
@@ -63,9 +64,9 @@ class Network {
 
     usize get_content_hash() const;
 
-    Value evaluate(const Position&    pos,
-                   AccumulatorStack&  accumulatorStack,
-                   AccumulatorCaches& cache) const;
+    Evaluation evaluate(const Position&    pos,
+                        AccumulatorStack&  accumulatorStack,
+                        AccumulatorCaches& cache) const;
 
 
     void verify(const std::function<void(std::string_view)>& f,

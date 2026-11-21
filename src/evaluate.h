@@ -43,10 +43,23 @@ class AccumulatorStack;
 
 std::string trace(Position& pos, const Eval::NNUE::Network& network);
 
-Value evaluate(const NNUE::Network&           network,
-               const Position&                pos,
-               Eval::NNUE::AccumulatorStack&  accumulators,
-               Eval::NNUE::AccumulatorCaches& caches);
+struct ActivationPattern {
+    u16 lowMask = 0;
+    u16 highMask = 0;
+    int layerStack = -1;
+
+    bool available() const { return layerStack >= 0; }
+};
+
+struct Evaluation {
+    Value             value;
+    ActivationPattern activations;
+};
+
+Evaluation evaluate(const NNUE::Network&           network,
+                    const Position&                pos,
+                    Eval::NNUE::AccumulatorStack&  accumulators,
+                    Eval::NNUE::AccumulatorCaches& caches);
 }  // namespace Eval
 
 }  // namespace Stockfish

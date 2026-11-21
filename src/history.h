@@ -159,12 +159,16 @@ struct CorrectionBundle {
     StatsEntry<T, D, true> minor;
     StatsEntry<T, D, true> nonPawnWhite;
     StatsEntry<T, D, true> nonPawnBlack;
+    StatsEntry<T, D, true> activationLow;
+    StatsEntry<T, D, true> activationHigh;
 
     void fill(T val) {
         pawn         = val;
         minor        = val;
         nonPawnWhite = val;
-        nonPawnBlack = val;
+        nonPawnBlack   = val;
+        activationLow  = 0;
+        activationHigh = 0;
     }
 };
 
