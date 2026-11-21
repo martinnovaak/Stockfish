@@ -157,12 +157,14 @@ template<typename T, int D>
 struct CorrectionBundle {
     StatsEntry<T, D, true> pawn;
     StatsEntry<T, D, true> minor;
+    StatsEntry<T, D, true> threat;
     StatsEntry<T, D, true> nonPawnWhite;
     StatsEntry<T, D, true> nonPawnBlack;
 
     void fill(T val) {
         pawn         = val;
         minor        = val;
+        threat       = val;
         nonPawnWhite = val;
         nonPawnBlack = val;
     }
@@ -236,6 +238,13 @@ struct SharedHistories {
         return correctionHistory[pos.minor_piece_key() & sizeMinus1];
     }
 
+    auto& threat_correction_entry(const Position& pos) {
+        return correctionHistory[threat_correction_key(pos) & sizeMinus1];
+    }
+    const auto& threat_correction_entry(const Position& pos) const {
+        return correctionHistory[threat_correction_key(pos) & sizeMinus1];
+    }
+
     template<Color c>
     auto& nonpawn_correction_entry(const Position& pos) {
         return correctionHistory[pos.non_pawn_key(c) & sizeMinus1];
@@ -251,6 +260,16 @@ struct SharedHistories {
 
 
    private:
+    static Key threat_correction_key(const Position& pos) {
+        Key key = pos.threats_by(ALL_PIECES) & pos.pieces(pos.side_to_move());
+        key ^= key >> 33;
+        key *= 0xff51afd7ed558ccdULL;
+        key ^= key >> 33;
+        key *= 0xc4ceb9fe1a85ec53ULL;
+        key ^= key >> 33;
+        return key ^ pos.side_to_move();
+    }
+
     usize sizeMinus1, pawnHistSizeMinus1;
 };
 
