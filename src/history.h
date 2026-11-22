@@ -159,16 +159,12 @@ struct CorrectionBundle {
     StatsEntry<T, D, true> minor;
     StatsEntry<T, D, true> nonPawnWhite;
     StatsEntry<T, D, true> nonPawnBlack;
-    StatsEntry<T, D, true> activationLow;
-    StatsEntry<T, D, true> activationHigh;
 
     void fill(T val) {
         pawn         = val;
         minor        = val;
         nonPawnWhite = val;
-        nonPawnBlack   = val;
-        activationLow  = 0;
-        activationHigh = 0;
+        nonPawnBlack = val;
     }
 };
 
@@ -201,6 +197,9 @@ struct ContinuationHistoryBlock {
     ContinuationHistory table[2][2];
 };
 
+using ActivationCorrectionHistory =
+  MultiArray<StatsEntry<i16, CORRECTION_HISTORY_LIMIT, true>, 192, 4, 256>;
+
 // Set of histories shared between groups of threads. To avoid excessive
 // cross-node data transfer, histories are shared only between threads
 // on a given NUMA node. The passed size must be a power of two to make
@@ -208,6 +207,7 @@ struct ContinuationHistoryBlock {
 struct SharedHistories {
     SharedHistories(usize threadCount) :
         correctionHistory(threadCount),
+        activationCorrectionHistory(make_unique_large_page<ActivationCorrectionHistory>()),
         continuationHistoryBlock(make_unique_large_page<ContinuationHistoryBlock>()),
         pawnHistory(threadCount) {
         assert((threadCount & (threadCount - 1)) == 0 && threadCount != 0);
@@ -216,7 +216,6 @@ struct SharedHistories {
     }
 
     auto& continuationHistory() { return continuationHistoryBlock->table; }
-
     usize get_size() const { return sizeMinus1 + 1; }
 
     auto& pawn_entry(const Position& pos) {
@@ -249,9 +248,10 @@ struct SharedHistories {
         return correctionHistory[pos.non_pawn_key(c) & sizeMinus1];
     }
 
-    UnifiedCorrectionHistory               correctionHistory;
-    LargePagePtr<ContinuationHistoryBlock> continuationHistoryBlock;
-    PawnHistory                            pawnHistory;
+    UnifiedCorrectionHistory                    correctionHistory;
+    LargePagePtr<ActivationCorrectionHistory>   activationCorrectionHistory;
+    LargePagePtr<ContinuationHistoryBlock>      continuationHistoryBlock;
+    PawnHistory                                 pawnHistory;
 
 
    private:

@@ -156,9 +156,10 @@ int Network::layer_stack(const Position& pos) const {
     return layerStackIndex[((band * 4 + queens) * 3 + layout) * 2 + many];
 }
 
-Evaluation Network::evaluate(const Position&    pos,
-                             AccumulatorStack&  accumulatorStack,
-                             AccumulatorCaches& cache) const {
+Value Network::evaluate(const Position&    pos,
+                        AccumulatorStack&  accumulatorStack,
+                        AccumulatorCaches& cache,
+                        u64*              activationKey) const {
 
     constexpr u64 alignment = CacheLineSize;
 
@@ -171,9 +172,12 @@ Evaluation Network::evaluate(const Position&    pos,
     const int bucket = layer_stack(pos);
 
     featureTransformer.transform(pos, accumulatorStack, cache, transformedFeatures, nnzInfo);
-    const auto [positional, activeMask] = network[bucket].propagate(transformedFeatures, nnzInfo);
-    return {static_cast<Value>(positional / OutputScale),
-            {u16(activeMask), u16(activeMask >> 16), bucket}};
+    u32        activeMask;
+    const auto positional =
+      network[bucket].propagate(transformedFeatures, nnzInfo, activationKey ? &activeMask : nullptr);
+    if (activationKey)
+        *activationKey = (u64(bucket + 1) << 32) | activeMask;
+    return static_cast<Value>(positional / OutputScale);
 }
 
 
@@ -241,7 +245,7 @@ NnueEvalTrace Network::trace_evaluate(const Position&    pos,
 
     for (IndexType b = 0; b < storedLayerStacks; ++b)
     {
-        const auto positional = network[b].propagate(transformedFeatures, nnzInfo).value;
+        const auto positional = network[b].propagate(transformedFeatures, nnzInfo);
         t.positional[b]       = static_cast<Value>(positional / OutputScale);
     }
 

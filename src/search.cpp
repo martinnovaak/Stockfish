@@ -110,22 +110,20 @@ int correction_value(const Worker& w, const Position& pos, const Stack* const ss
     return 13806 * pcv + 9512 * micv + 11615 * (wnpcv + bnpcv) + cntcv;
 }
 
-usize activation_index(const SharedHistories& shared, int layerStack, u16 mask) {
-    constexpr u64 HashMultiplier = 0x9e3779b97f4a7c15ULL;
-    const u64 key = (u64(layerStack) << 16) | mask;
-    const u64 hash = (key * HashMultiplier) >> 32;
-    return hash & (shared.get_size() - 1);
-}
-
-int activation_correction(const SharedHistories& shared, const Eval::ActivationPattern& activations) {
-    if (!activations.available())
+int activation_correction(const SharedHistories& shared, u64 activationKey) {
+    if (!activationKey)
         return 0;
 
-    const auto lowIndex = activation_index(shared, activations.layerStack, activations.lowMask);
-    const auto highIndex = activation_index(shared, activations.layerStack, activations.highMask);
-    const int low = shared.correctionHistory[lowIndex].activationLow;
-    const int high = shared.correctionHistory[highIndex].activationHigh;
-    return 3451 * (low + high);
+    const int layerStack = int(activationKey >> 32) - 1;
+    const u32 mask       = u32(activationKey);
+    int correction = 0;
+    for (int group = 0; group < 4; ++group)
+    {
+        const u8 pattern = u8(mask >> (group * 8));
+        correction += (*shared.activationCorrectionHistory)[layerStack][group][pattern];
+    }
+
+    return 1726 * correction;
 }
 
 // Add correctionHistory value to raw staticEval and guarantee evaluation
@@ -138,7 +136,7 @@ void update_correction_history(const Position& pos,
                                Stack* const    ss,
                                Search::Worker& workerThread,
                                const int       bonus,
-                               const Eval::ActivationPattern& activations) {
+                               u64             activationKey) {
     const Move m = (ss - 1)->currentMove;
 
     constexpr int nonPawnWeight = 186;
@@ -148,12 +146,15 @@ void update_correction_history(const Position& pos,
     shared.minor_piece_correction_entry(pos).minor << bonus * 150 / 128;
     shared.nonpawn_correction_entry<WHITE>(pos).nonPawnWhite << bonus * nonPawnWeight / 128;
     shared.nonpawn_correction_entry<BLACK>(pos).nonPawnBlack << bonus * nonPawnWeight / 128;
-    if (activations.available())
+    if (activationKey)
     {
-        const auto lowIndex = activation_index(shared, activations.layerStack, activations.lowMask);
-        const auto highIndex = activation_index(shared, activations.layerStack, activations.highMask);
-        shared.correctionHistory[lowIndex].activationLow << bonus;
-        shared.correctionHistory[highIndex].activationHigh << bonus;
+        const int layerStack = int(activationKey >> 32) - 1;
+        const u32 mask       = u32(activationKey);
+        for (int group = 0; group < 4; ++group)
+        {
+            const u8 pattern = u8(mask >> (group * 8));
+            (*shared.activationCorrectionHistory)[layerStack][group][pattern] << bonus;
+        }
     }
 
     if (m.is_ok())
@@ -735,7 +736,6 @@ void Search::Worker::undo_null_move(Position& pos) { pos.undo_null_move(); }
 void Search::Worker::clear() {
     mainHistory.fill(-5);
     captureHistory.fill(-742);
-    activationCache.fill({});
 
     // Each thread clears its part of the dynamically-sized shared histories.
     // The constant-size continuation history is initialized by thread 0 of each NUMA node.
@@ -743,11 +743,18 @@ void Search::Worker::clear() {
     sharedHistory.pawnHistory.clear_range(-1338, numaThreadIdx, numaTotal);
 
     if (numaThreadIdx == 0)
+    {
+        for (auto& stack : *sharedHistory.activationCorrectionHistory)
+            for (auto& group : stack)
+                for (auto& pattern : group)
+                    pattern = 0;
+
         for (bool inCheck : {false, true})
             for (StatsType c : {NoCaptures, Captures})
                 for (auto& to : continuationHistory[inCheck][c])
                     for (auto& h : to)
                         h.fill(-586);
+    }
 
     ttMoveHistory = 0;
 
@@ -828,7 +835,7 @@ Value Search::Worker::search(
         // Step 2. Check for aborted search or immediate draw
         if (threads.stop.load(std::memory_order_relaxed) || pos.is_draw(ss->ply)
             || ss->ply >= MAX_PLY)
-            return (ss->ply >= MAX_PLY && !ss->inCheck) ? evaluate(pos).value : value_draw(nodes);
+            return (ss->ply >= MAX_PLY && !ss->inCheck) ? evaluate(pos) : value_draw(nodes);
 
         // Step 3. Mate distance pruning. Even if we mate at the next move our score
         // would be at best mate_in(ss->ply + 1), but if alpha is already bigger because
@@ -865,7 +872,7 @@ Value Search::Worker::search(
     ttCapture    = ttData.move && pos.capture_stage(ttData.move);
 
     // Step 5. Static evaluation of the position
-    Eval::ActivationPattern activations;
+    u64   activationKey       = 0;
     Value unadjustedStaticEval = VALUE_NONE;
 
     // Skip early pruning when in check
@@ -878,15 +885,9 @@ Value Search::Worker::search(
         // Never assume anything about values stored in TT
         unadjustedStaticEval = ttData.eval;
         if (!is_valid(unadjustedStaticEval))
-        {
-            const auto evaluation = evaluate(pos);
-            unadjustedStaticEval = evaluation.value;
-            activations = evaluation.activations;
-        }
-        else
-            activations = cached_activations(posKey);
+            unadjustedStaticEval = evaluate(pos, &activationKey);
 
-        correctionValue += activation_correction(sharedHistory, activations);
+        correctionValue += activation_correction(sharedHistory, activationKey);
         ss->staticEval = eval = to_corrected_static_eval(unadjustedStaticEval, correctionValue);
 
         // ttValue can be used as a better position evaluation
@@ -896,10 +897,8 @@ Value Search::Worker::search(
     }
     else
     {
-        const auto evaluation = evaluate(pos);
-        unadjustedStaticEval = evaluation.value;
-        activations = evaluation.activations;
-        correctionValue += activation_correction(sharedHistory, activations);
+        unadjustedStaticEval = evaluate(pos, &activationKey);
+        correctionValue += activation_correction(sharedHistory, activationKey);
         ss->staticEval = eval = to_corrected_static_eval(unadjustedStaticEval, correctionValue);
 
         // Static evaluation is saved as it was before adjustment by correction history
@@ -1346,7 +1345,7 @@ moves_loop:  // When in check, search starts here
                     const int bonus =
                       std::clamp(int(value - ss->staticEval) * 664 / 1024,
                                  -CORRECTION_HISTORY_LIMIT / 4, CORRECTION_HISTORY_LIMIT / 4);
-                    update_correction_history(pos, ss, *this, bonus, activations);
+                    update_correction_history(pos, ss, *this, bonus, activationKey);
                 }
 
                 return value;
@@ -1698,7 +1697,7 @@ moves_loop:  // When in check, search starts here
         auto bonus =
           std::clamp(int(bestValue - ss->staticEval) * depth * (bestMove ? 12 : 18) / 128,
                      -CORRECTION_HISTORY_LIMIT / 4, CORRECTION_HISTORY_LIMIT / 4);
-        update_correction_history(pos, ss, *this, 1061 * bonus / 1024, activations);
+        update_correction_history(pos, ss, *this, 1061 * bonus / 1024, activationKey);
     }
 
     // The search is now complete
@@ -1755,7 +1754,7 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
 
     // Step 2. Check for an immediate draw or maximum ply reached
     if (pos.is_draw(ss->ply) || ss->ply >= MAX_PLY)
-        return (ss->ply >= MAX_PLY && !ss->inCheck) ? evaluate(pos).value : VALUE_DRAW;
+        return (ss->ply >= MAX_PLY && !ss->inCheck) ? evaluate(pos) : VALUE_DRAW;
 
     assert(0 <= ss->ply && ss->ply < MAX_PLY);
 
@@ -1786,19 +1785,13 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
             // Never assume anything about values stored in TT
             unadjustedStaticEval = ttData.eval;
 
-            Eval::ActivationPattern activations;
+            u64 activationKey = 0;
             if (!is_valid(unadjustedStaticEval))
-            {
-                const auto evaluation = evaluate(pos);
-                unadjustedStaticEval = evaluation.value;
-                activations = evaluation.activations;
-            }
-            else
-                activations = cached_activations(posKey);
+                unadjustedStaticEval = evaluate(pos, &activationKey);
 
-            const auto activationCorrection = activation_correction(sharedHistory, activations);
-            ss->staticEval = bestValue =
-              to_corrected_static_eval(unadjustedStaticEval, correctionValue + activationCorrection);
+            const auto activationCorrection = activation_correction(sharedHistory, activationKey);
+            ss->staticEval = bestValue = to_corrected_static_eval(
+              unadjustedStaticEval, correctionValue + activationCorrection);
 
             // ttValue can be used as a better position evaluation
             if (is_valid(ttData.value) && !is_decisive(ttData.value)
@@ -1807,12 +1800,11 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
         }
         else
         {
-            const auto evaluation = evaluate(pos);
-            unadjustedStaticEval = evaluation.value;
-            const auto activationCorrection =
-              activation_correction(sharedHistory, evaluation.activations);
-            ss->staticEval = bestValue =
-              to_corrected_static_eval(unadjustedStaticEval, correctionValue + activationCorrection);
+            u64 activationKey = 0;
+            unadjustedStaticEval = evaluate(pos, &activationKey);
+            const auto activationCorrection = activation_correction(sharedHistory, activationKey);
+            ss->staticEval = bestValue = to_corrected_static_eval(
+              unadjustedStaticEval, correctionValue + activationCorrection);
         }
 
         // Stand pat. Return immediately if static value is at least beta
@@ -1969,20 +1961,9 @@ TimePoint Search::Worker::elapsed() const {
 
 // Evaluate the current position of the game tree, from the point of view of
 // the side to move.
-Eval::Evaluation Search::Worker::evaluate(const Position& pos) {
-    const auto evaluation = Eval::evaluate(network[numaAccessToken], pos, accumulatorStack,
-                                           refreshTable);
-    const Key key = pos.key();
-    activationCache[(key ^ (key >> 32)) & (ActivationCacheSize - 1)] = {key, evaluation.activations};
-    return evaluation;
-}
-
-Eval::ActivationPattern Search::Worker::cached_activations(Key key) const {
-    const auto& entry = activationCache[(key ^ (key >> 32)) & (ActivationCacheSize - 1)];
-    if (entry.key == key)
-        return entry.activations;
-
-    return {};
+Value Search::Worker::evaluate(const Position& pos, u64* activationKey) {
+    return Eval::evaluate(network[numaAccessToken], pos, accumulatorStack, refreshTable,
+                          activationKey);
 }
 
 namespace {

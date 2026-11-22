@@ -45,15 +45,15 @@ static int simple_eval(const Position& pos) {
 
 Value scale_evaluation(Value nnue, const Position& pos);
 
-Eval::Evaluation Eval::evaluate(const Eval::NNUE::Network&     network,
-                                const Position&                pos,
-                                Eval::NNUE::AccumulatorStack&  accumulators,
-                                Eval::NNUE::AccumulatorCaches& caches) {
+Value Eval::evaluate(const Eval::NNUE::Network&     network,
+                     const Position&                pos,
+                     Eval::NNUE::AccumulatorStack&  accumulators,
+                     Eval::NNUE::AccumulatorCaches& caches,
+                     u64*                           activationKey) {
 
     assert(!pos.checkers());
-    auto evaluation = network.evaluate(pos, accumulators, caches);
-    evaluation.value = scale_evaluation(evaluation.value, pos);
-    return evaluation;
+    Value nnue = network.evaluate(pos, accumulators, caches, activationKey);
+    return scale_evaluation(nnue, pos);
 }
 
 // Applies material and rule50 scaling to the raw NNUE eval
@@ -102,7 +102,7 @@ std::string Eval::trace(Position& pos, const Eval::NNUE::Network& network) {
 
     ss << std::showpoint << std::showpos << std::fixed << std::setprecision(2) << std::setw(15);
 
-    Value nnue = network.evaluate(pos, *accumulators, *caches).value;
+    Value nnue = network.evaluate(pos, *accumulators, *caches);
     Value s_v  = scale_evaluation(nnue, pos);  // requires stm perspective
 
     ss << "NNUE evaluation          " << nnue << " (side to move, internal units)\n";
