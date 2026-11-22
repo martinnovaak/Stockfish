@@ -198,7 +198,7 @@ struct ContinuationHistoryBlock {
 };
 
 using ActivationCorrectionHistory =
-  MultiArray<StatsEntry<i16, CORRECTION_HISTORY_LIMIT, true>, 192, 4, 256>;
+  MultiArray<StatsEntry<i16, CORRECTION_HISTORY_LIMIT, true>, 192, 8, 81>;
 
 // Set of histories shared between groups of threads. To avoid excessive
 // cross-node data transfer, histories are shared only between threads

@@ -95,7 +95,7 @@ struct NetworkArchitecture {
 
     i32 propagate(const TransformedFeatureType* transformedFeatures,
                   const NNZInfo<L1>&            nnzInfo,
-                  u32*                          activationMask = nullptr) const {
+                  u64*                          activationPatterns = nullptr) const {
         struct alignas(CacheLineSize) Buffer {
             alignas(CacheLineSize) typename decltype(fc_0)::OutputBuffer fc_0_out;
             alignas(CacheLineSize) typename decltype(ac_sqr_0)::OutputType
@@ -124,11 +124,23 @@ struct NetworkArchitecture {
         ac_1.propagate(buffer.fc_1_out, buffer.concat_buffer + FC_0_OUTPUTS * 2 + FC_1_OUTPUTS);
 #endif
 
-        if (activationMask)
+        if (activationPatterns)
         {
-            *activationMask = 0;
-            for (int i = 0; i < FC_1_OUTPUTS; ++i)
-                *activationMask |= u32(buffer.fc_1_out[i] >= (1 << WeightScaleBits)) << i;
+            *activationPatterns = 0;
+            for (int group = 0; group < 8; ++group)
+            {
+                u64 pattern    = 0;
+                int multiplier = 1;
+                for (int i = 0; i < 4; ++i)
+                {
+                    const i32 activation = buffer.fc_1_out[group * 4 + i];
+                    const int state = int(activation >= (1 << WeightScaleBits))
+                                    + int(activation >= (33 << WeightScaleBits));
+                    pattern += state * multiplier;
+                    multiplier *= 3;
+                }
+                *activationPatterns |= pattern << (group * 7);
+            }
         }
 
         fc_2.propagate(buffer.concat_buffer, buffer.fc_2_out);

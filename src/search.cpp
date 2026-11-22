@@ -114,16 +114,15 @@ int activation_correction(const SharedHistories& shared, u64 activationKey) {
     if (!activationKey)
         return 0;
 
-    const int layerStack = int(activationKey >> 32) - 1;
-    const u32 mask       = u32(activationKey);
+    const int layerStack = int(activationKey >> 56) - 1;
     int correction = 0;
-    for (int group = 0; group < 4; ++group)
+    for (int group = 0; group < 8; ++group)
     {
-        const u8 pattern = u8(mask >> (group * 8));
+        const u8 pattern = u8(activationKey >> (group * 7)) & 0x7F;
         correction += (*shared.activationCorrectionHistory)[layerStack][group][pattern];
     }
 
-    return 1726 * correction;
+    return 863 * correction;
 }
 
 // Add correctionHistory value to raw staticEval and guarantee evaluation
@@ -148,11 +147,10 @@ void update_correction_history(const Position& pos,
     shared.nonpawn_correction_entry<BLACK>(pos).nonPawnBlack << bonus * nonPawnWeight / 128;
     if (activationKey)
     {
-        const int layerStack = int(activationKey >> 32) - 1;
-        const u32 mask       = u32(activationKey);
-        for (int group = 0; group < 4; ++group)
+        const int layerStack = int(activationKey >> 56) - 1;
+        for (int group = 0; group < 8; ++group)
         {
-            const u8 pattern = u8(mask >> (group * 8));
+            const u8 pattern = u8(activationKey >> (group * 7)) & 0x7F;
             (*shared.activationCorrectionHistory)[layerStack][group][pattern] << bonus;
         }
     }

@@ -172,11 +172,12 @@ Value Network::evaluate(const Position&    pos,
     const int bucket = layer_stack(pos);
 
     featureTransformer.transform(pos, accumulatorStack, cache, transformedFeatures, nnzInfo);
-    u32        activeMask;
+    u64        activationPatterns;
     const auto positional =
-      network[bucket].propagate(transformedFeatures, nnzInfo, activationKey ? &activeMask : nullptr);
+      network[bucket].propagate(transformedFeatures, nnzInfo,
+                                activationKey ? &activationPatterns : nullptr);
     if (activationKey)
-        *activationKey = (u64(bucket + 1) << 32) | activeMask;
+        *activationKey = (u64(bucket + 1) << 56) | activationPatterns;
     return static_cast<Value>(positional / OutputScale);
 }
 
