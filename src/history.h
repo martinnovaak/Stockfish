@@ -200,6 +200,35 @@ struct ContinuationHistoryBlock {
 using ActivationCorrectionHistory =
   MultiArray<StatsEntry<i16, CORRECTION_HISTORY_LIMIT, true>, 192, 4, 256>;
 
+class ActivationCache {
+    static constexpr usize EntryCount        = 1 << 20;
+    static constexpr u64   IndexMask         = EntryCount - 1;
+    static constexpr u64   PositionTagMask   = (1ULL << 24) - 1;
+    static constexpr u64   ActivationKeyMask = (1ULL << 40) - 1;
+
+   public:
+    void clear() {
+        for (auto& entry : entries)
+            entry = 0;
+    }
+
+    void store(Key key, u64 activationKey) {
+        assert(!(activationKey & ~ActivationKeyMask));
+        const u64 positionTag = (key >> 40) & PositionTagMask;
+        entries[key & IndexMask] = activationKey | (positionTag << 40);
+    }
+
+    u64 probe(Key key) const {
+        const u64 entry       = entries[key & IndexMask];
+        const u64 positionTag = (key >> 40) & PositionTagMask;
+
+        return (entry >> 40) == positionTag ? entry & ActivationKeyMask : 0;
+    }
+
+   private:
+    MultiArray<RelaxedAtomic<u64>, EntryCount> entries;
+};
+
 // Set of histories shared between groups of threads. To avoid excessive
 // cross-node data transfer, histories are shared only between threads
 // on a given NUMA node. The passed size must be a power of two to make
@@ -207,6 +236,7 @@ using ActivationCorrectionHistory =
 struct SharedHistories {
     SharedHistories(usize threadCount) :
         correctionHistory(threadCount),
+        activationCache(make_unique_large_page<ActivationCache>()),
         activationCorrectionHistory(make_unique_large_page<ActivationCorrectionHistory>()),
         continuationHistoryBlock(make_unique_large_page<ContinuationHistoryBlock>()),
         pawnHistory(threadCount) {
@@ -248,10 +278,11 @@ struct SharedHistories {
         return correctionHistory[pos.non_pawn_key(c) & sizeMinus1];
     }
 
-    UnifiedCorrectionHistory                    correctionHistory;
-    LargePagePtr<ActivationCorrectionHistory>   activationCorrectionHistory;
-    LargePagePtr<ContinuationHistoryBlock>      continuationHistoryBlock;
-    PawnHistory                                 pawnHistory;
+    UnifiedCorrectionHistory                  correctionHistory;
+    LargePagePtr<ActivationCache>             activationCache;
+    LargePagePtr<ActivationCorrectionHistory> activationCorrectionHistory;
+    LargePagePtr<ContinuationHistoryBlock>    continuationHistoryBlock;
+    PawnHistory                               pawnHistory;
 
 
    private:

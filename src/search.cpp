@@ -744,6 +744,8 @@ void Search::Worker::clear() {
 
     if (numaThreadIdx == 0)
     {
+        sharedHistory.activationCache->clear();
+
         for (auto& stack : *sharedHistory.activationCorrectionHistory)
             for (auto& group : stack)
                 for (auto& pattern : group)
@@ -886,6 +888,8 @@ Value Search::Worker::search(
         unadjustedStaticEval = ttData.eval;
         if (!is_valid(unadjustedStaticEval))
             unadjustedStaticEval = evaluate(pos, &activationKey);
+        else
+            activationKey = sharedHistory.activationCache->probe(posKey);
 
         correctionValue += activation_correction(sharedHistory, activationKey);
         ss->staticEval = eval = to_corrected_static_eval(unadjustedStaticEval, correctionValue);
@@ -1788,6 +1792,8 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
             u64 activationKey = 0;
             if (!is_valid(unadjustedStaticEval))
                 unadjustedStaticEval = evaluate(pos, &activationKey);
+            else
+                activationKey = sharedHistory.activationCache->probe(posKey);
 
             const auto activationCorrection = activation_correction(sharedHistory, activationKey);
             ss->staticEval = bestValue = to_corrected_static_eval(
@@ -1962,8 +1968,11 @@ TimePoint Search::Worker::elapsed() const {
 // Evaluate the current position of the game tree, from the point of view of
 // the side to move.
 Value Search::Worker::evaluate(const Position& pos, u64* activationKey) {
-    return Eval::evaluate(network[numaAccessToken], pos, accumulatorStack, refreshTable,
-                          activationKey);
+    const Value value = Eval::evaluate(network[numaAccessToken], pos, accumulatorStack,
+                                       refreshTable, activationKey);
+    if (activationKey)
+        sharedHistory.activationCache->store(pos.key(), *activationKey);
+    return value;
 }
 
 namespace {
