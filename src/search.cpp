@@ -123,7 +123,7 @@ int activation_correction(const SharedHistories& shared, u64 activationKey) {
         correction += (*shared.activationCorrectionHistory)[layerStack][group][pattern];
     }
 
-    return 1726 * correction;
+    return 863 * correction;
 }
 
 // Add correctionHistory value to raw staticEval and guarantee evaluation
