@@ -107,7 +107,26 @@ int correction_value(const Worker& w, const Position& pos, const Stack* const ss
             + 6307 * (*(ss - 6)->continuationCorrectionHistory)[pos.piece_on(m.to_sq())][m.to_sq()]
           : 80695;
 
-    return 13806 * pcv + 9512 * micv + 11615 * (wnpcv + bnpcv) + cntcv;
+    const int pawnCorrection         = 13806 * pcv;
+    const int minorCorrection        = 9512 * micv;
+    const int whiteNonPawnCorrection = 11615 * wnpcv;
+    const int blackNonPawnCorrection = 11615 * bnpcv;
+    const int correctionSum =
+      pawnCorrection + minorCorrection + whiteNonPawnCorrection + blackNonPawnCorrection;
+    const int absoluteCorrectionSum =
+      std::abs(pawnCorrection) + std::abs(minorCorrection) + std::abs(whiteNonPawnCorrection)
+      + std::abs(blackNonPawnCorrection);
+
+    if (!absoluteCorrectionSum)
+        return cntcv;
+
+    const int agreement = static_cast<int>(
+      std::int64_t{128} * std::abs(correctionSum) / absoluteCorrectionSum);
+    const int correctionScale = 96 + agreement / 4;
+    const int scaledCorrection = static_cast<int>(
+      std::int64_t{correctionSum} * correctionScale / 128);
+
+    return scaledCorrection + cntcv;
 }
 
 // Add correctionHistory value to raw staticEval and guarantee evaluation
