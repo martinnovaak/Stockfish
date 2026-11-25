@@ -107,7 +107,11 @@ int correction_value(const Worker& w, const Position& pos, const Stack* const ss
             + 6307 * (*(ss - 6)->continuationCorrectionHistory)[pos.piece_on(m.to_sq())][m.to_sq()]
           : 80695;
 
-    return 13806 * pcv + 9512 * micv + 11615 * (wnpcv + bnpcv) + cntcv;
+    int rcv = 0;
+    for (int region = 0; region < REGION_NB; ++region)
+        rcv += shared.region_correction_entry(pos, region);
+
+    return 13806 * pcv + 9512 * micv + 11615 * (wnpcv + bnpcv) + cntcv + 384 * rcv;
 }
 
 // Add correctionHistory value to raw staticEval and guarantee evaluation
@@ -129,6 +133,9 @@ void update_correction_history(const Position& pos,
     shared.minor_piece_correction_entry(pos).minor << bonus * 150 / 128;
     shared.nonpawn_correction_entry<WHITE>(pos).nonPawnWhite << bonus * nonPawnWeight / 128;
     shared.nonpawn_correction_entry<BLACK>(pos).nonPawnBlack << bonus * nonPawnWeight / 128;
+
+    for (int region = 0; region < REGION_NB; ++region)
+        shared.region_correction_entry(pos, region) << bonus;
 
     if (m.is_ok())
     {
@@ -705,6 +712,7 @@ void Search::Worker::clear() {
     // The constant-size continuation history is initialized by thread 0 of each NUMA node.
     sharedHistory.correctionHistory.clear_range(-5, numaThreadIdx, numaTotal);
     sharedHistory.pawnHistory.clear_range(-1338, numaThreadIdx, numaTotal);
+    sharedHistory.regionCorrectionHistory.clear_range(0, numaThreadIdx, numaTotal);
 
     if (numaThreadIdx == 0)
         for (bool inCheck : {false, true})

@@ -39,6 +39,7 @@ constexpr int PAWN_HISTORY_BASE_SIZE   = 8192;  // has to be a power of 2
 constexpr int UINT_16_HISTORY_SIZE     = std::numeric_limits<u16>::max() + 1;
 constexpr int CORRHIST_BASE_SIZE       = 2 * UINT_16_HISTORY_SIZE;
 constexpr int CORRECTION_HISTORY_LIMIT = 1024;
+constexpr int REGION_NB                = 16;
 constexpr int LOW_PLY_HISTORY_SIZE     = 5;
 
 static_assert((PAWN_HISTORY_BASE_SIZE & (PAWN_HISTORY_BASE_SIZE - 1)) == 0,
@@ -187,6 +188,8 @@ struct CorrHistTypedef<Continuation> {
 
 using UnifiedCorrectionHistory =
   DynStats<CorrectionBundle<i16, CORRECTION_HISTORY_LIMIT>, CORRHIST_BASE_SIZE>;
+using RegionCorrectionHistory =
+  DynStats<AtomicStats<i16, CORRECTION_HISTORY_LIMIT, UINT_16_HISTORY_SIZE>, COLOR_NB * REGION_NB>;
 
 template<CorrHistType T>
 using CorrectionHistory = typename Detail::CorrHistTypedef<T>::type;
@@ -204,6 +207,7 @@ struct ContinuationHistoryBlock {
 struct SharedHistories {
     SharedHistories(usize threadCount) :
         correctionHistory(threadCount),
+        regionCorrectionHistory(1),
         continuationHistoryBlock(make_unique_large_page<ContinuationHistoryBlock>()),
         pawnHistory(threadCount) {
         assert((threadCount & (threadCount - 1)) == 0 && threadCount != 0);
@@ -245,12 +249,29 @@ struct SharedHistories {
         return correctionHistory[pos.non_pawn_key(c) & sizeMinus1];
     }
 
+    auto& region_correction_entry(const Position& pos, int region) {
+        return regionCorrectionHistory[pos.side_to_move() * REGION_NB + region]
+                                      [region_key(pos, region)];
+    }
+    const auto& region_correction_entry(const Position& pos, int region) const {
+        return regionCorrectionHistory[pos.side_to_move() * REGION_NB + region]
+                                      [region_key(pos, region)];
+    }
+
     UnifiedCorrectionHistory               correctionHistory;
+    RegionCorrectionHistory                regionCorrectionHistory;
     LargePagePtr<ContinuationHistoryBlock> continuationHistoryBlock;
     PawnHistory                            pawnHistory;
 
 
    private:
+    static u16 region_key(const Position& pos, int region) {
+        const int   first = 16 * (region / 4) + 2 * (region % 4);
+        const auto& board = pos.piece_array();
+        return u16(board[first] | (board[first + 1] << 4) | (board[first + 8] << 8)
+                   | (board[first + 9] << 12));
+    }
+
     usize sizeMinus1, pawnHistSizeMinus1;
 };
 
