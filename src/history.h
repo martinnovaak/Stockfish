@@ -192,6 +192,10 @@ using UnifiedCorrectionHistory =
 template<CorrHistType T>
 using CorrectionHistory = typename Detail::CorrHistTypedef<T>::type;
 
+constexpr int BUTTERFLY_CORRECTION_HISTORY_SIZE = COLOR_NB * 2 * 2 * SQUARE_NB * SQUARE_NB;
+using ButterflyCorrectionHistory =
+  Stats<i16, CORRECTION_HISTORY_LIMIT, BUTTERFLY_CORRECTION_HISTORY_SIZE>;
+
 using TTMoveHistory = StatsEntry<i16, 8192>;
 
 struct ContinuationHistoryBlock {

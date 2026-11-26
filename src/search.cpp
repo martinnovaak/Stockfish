@@ -107,7 +107,12 @@ int correction_value(const Worker& w, const Position& pos, const Stack* const ss
             + 6307 * (*(ss - 6)->continuationCorrectionHistory)[pos.piece_on(m.to_sq())][m.to_sq()]
           : 80695;
 
-    return 13806 * pcv + 9512 * micv + 11615 * (wnpcv + bnpcv) + cntcv;
+    const u16 butterflyIndex = (ss - 1)->butterflyCorrectionIndex;
+    const int bcv            = butterflyIndex != BUTTERFLY_CORRECTION_HISTORY_SIZE
+                               ? w.butterflyCorrectionHistory[butterflyIndex]
+                               : 0;
+
+    return 13806 * pcv + 9512 * micv + 11615 * (wnpcv + bnpcv) + cntcv + 2000 * bcv;
 }
 
 // Add correctionHistory value to raw staticEval and guarantee evaluation
@@ -129,6 +134,10 @@ void update_correction_history(const Position& pos,
     shared.minor_piece_correction_entry(pos).minor << bonus * 150 / 128;
     shared.nonpawn_correction_entry<WHITE>(pos).nonPawnWhite << bonus * nonPawnWeight / 128;
     shared.nonpawn_correction_entry<BLACK>(pos).nonPawnBlack << bonus * nonPawnWeight / 128;
+
+    const u16 butterflyIndex = (ss - 1)->butterflyCorrectionIndex;
+    if (butterflyIndex != BUTTERFLY_CORRECTION_HISTORY_SIZE)
+        workerThread.butterflyCorrectionHistory[butterflyIndex] << bonus;
 
     if (m.is_ok())
     {
@@ -673,6 +682,16 @@ void Search::Worker::do_move(
 
     ++nodes;
 
+    ss.butterflyCorrectionIndex = BUTTERFLY_CORRECTION_HISTORY_SIZE;
+    if (!capture && move.type_of() == NORMAL)
+    {
+        const Square   from    = move.from_sq();
+        const Bitboard threats = pos.threats_on(from, to);
+
+        ss.butterflyCorrectionIndex = u16((pos.side_to_move() << 14) | (bool(threats & from) << 13)
+                                          | (bool(threats & to) << 12) | move.raw());
+    }
+
     Dirties& dirties = accumulatorStack.push(pos);
     pos.do_move(move, givesCheck, dirties, &sharedHistory);
 
@@ -683,6 +702,7 @@ void Search::Worker::do_move(
 
 void Search::Worker::do_null_move(Position& pos, Stack* const ss) {
     pos.do_null_move();
+    ss->butterflyCorrectionIndex      = BUTTERFLY_CORRECTION_HISTORY_SIZE;
     ss->currentMove                   = Move::null();
     ss->continuationHistory           = &continuationHistory[0][0][NO_PIECE][0];
     ss->continuationCorrectionHistory = &continuationCorrectionHistory[NO_PIECE][0];
@@ -700,6 +720,7 @@ void Search::Worker::undo_null_move(Position& pos) { pos.undo_null_move(); }
 void Search::Worker::clear() {
     mainHistory.fill(-5);
     captureHistory.fill(-742);
+    butterflyCorrectionHistory.fill(0);
 
     // Each thread clears its part of the dynamically-sized shared histories.
     // The constant-size continuation history is initialized by thread 0 of each NUMA node.

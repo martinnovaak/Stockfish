@@ -130,6 +130,7 @@ struct Stack {
     int                         cutoffCnt;
     int                         reduction;
     int                         priorNMPFailHigh;
+    u16                         butterflyCorrectionIndex = BUTTERFLY_CORRECTION_HISTORY_SIZE;
 };
 
 
@@ -333,6 +334,7 @@ class Worker {
 
     CapturePieceToHistory           captureHistory;
     CorrectionHistory<Continuation> continuationCorrectionHistory;
+    ButterflyCorrectionHistory      butterflyCorrectionHistory;
 
     TTMoveHistory    ttMoveHistory;
     SharedHistories& sharedHistory;

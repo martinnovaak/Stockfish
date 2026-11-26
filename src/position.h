@@ -121,6 +121,7 @@ class Position {
     void     update_slider_blockers(Color c) const;
     Bitboard xattacks_by(PieceType pt, Color c, Bitboard occupied) const;
     Bitboard threats_by(PieceType pt) const;
+    Bitboard threats_on(Square from, Square to) const;
 
     // Properties of moves
     bool  legal(Move m) const;
@@ -300,6 +301,18 @@ inline Bitboard Position::threats_by(PieceType pt) const {
     if (!st->threats[ALL_PIECES])
         compute_threats();
     return st->threats[pt];
+}
+
+inline Bitboard Position::threats_on(Square from, Square to) const {
+    if (const Bitboard threats = st->threats[ALL_PIECES])
+        return threats & (from | to);
+
+    // Match compute_threats() even when quiet move scoring has not populated the cache.
+    const Bitboard occupied = pieces() ^ square<KING>(sideToMove);
+    const Bitboard enemies  = pieces(~sideToMove);
+
+    return (attackers_to(from, occupied) & enemies ? square_bb(from) : 0)
+         | (attackers_to(to, occupied) & enemies ? square_bb(to) : 0);
 }
 
 inline Bitboard Position::checkers() const { return st->checkersBB; }
